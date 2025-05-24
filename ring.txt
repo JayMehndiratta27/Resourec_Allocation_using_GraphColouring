@@ -1,0 +1,8 @@
+Graph: Ring
+Resources: 3
+Process 1 (P: 2) --> 2 6
+Process 2 (P: 2) --> 1 3
+Process 3 (P: 2) --> 2 4
+Process 4 (P: 2) --> 3 5
+Process 5 (P: 2) --> 4 6
+Process 6 (P: 2) --> 5 1 

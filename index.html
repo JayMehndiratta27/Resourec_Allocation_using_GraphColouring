@@ -1,0 +1,1020 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Resource Allocation Graph</title>
+  <script src="https://d3js.org/d3.v6.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f5f5f5;
+      margin: 0; padding: 20px;
+    }
+    #container {
+      max-width: 1000px;
+      margin: auto;
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+      position: relative;
+    }
+    textarea {
+      width: 100%;
+      height: 120px;
+      font-family: monospace;
+      padding: 10px;
+      margin-bottom: 10px;
+    }
+    button {
+      padding: 10px 16px;
+      margin: 5px 10px 5px 0;
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #45a049;
+    }
+    .output {
+      margin-top: 15px;
+      padding: 10px;
+      background: #f8f9fa;
+      border-radius: 5px;
+      font-family: monospace;
+    }
+    svg {
+      width: 100%;
+      height: 500px;
+      border: 1px solid #ccc;
+      background: #fafafa;
+      margin-top: 20px;
+    }
+    #resourcePanel {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      width: 320px;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+      padding: 15px;
+      cursor: move;
+      z-index: 1000;
+      transition: all 0.3s ease;
+      max-height: calc(100vh - 40px);
+      overflow-y: auto;
+      transform: translateX(0);
+      opacity: 1;
+    }
+    #resourcePanel.collapsed {
+      transform: translateX(calc(100% - 40px));
+      opacity: 0.8;
+    }
+    #resourcePanel:hover {
+      box-shadow: 0 6px 25px rgba(0,0,0,0.2);
+      opacity: 1;
+    }
+    #resourcePanelHeader {
+      background: linear-gradient(135deg, #2196F3, #1976D2);
+      color: white;
+      padding: 12px;
+      margin: -15px -15px 15px -15px;
+      border-radius: 12px 12px 0 0;
+      cursor: move;
+      font-weight: bold;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      user-select: none;
+    }
+    #togglePanel {
+      background: none;
+      border: none;
+      color: white;
+      cursor: pointer;
+      padding: 5px;
+      font-size: 16px;
+      transition: transform 0.3s ease;
+    }
+    #togglePanel:hover {
+      transform: scale(1.1);
+    }
+    #resourcePanel.collapsed #togglePanel {
+      transform: rotate(180deg);
+    }
+    .resource-item {
+      padding: 15px;
+      margin: 10px 0;
+      background: #f8f9fa;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      transition: all 0.3s ease;
+      border: 1px solid #e0e0e0;
+    }
+    .resource-item:hover {
+      transform: translateX(5px);
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      background: #fff;
+    }
+    .node-circle {
+      width: 35px;
+      height: 35px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #4CAF50, #388E3C);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-weight: bold;
+      flex-shrink: 0;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+      transition: all 0.3s ease;
+    }
+    .node-circle:hover {
+      transform: scale(1.1);
+      box-shadow: 0 3px 8px rgba(0,0,0,0.3);
+    }
+    .resources-container {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      flex-grow: 1;
+      padding: 5px;
+    }
+    .resource-circle {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #2196F3, #1976D2);
+      border: 2px solid #1976D2;
+      transition: all 0.3s ease;
+      position: relative;
+    }
+    .resource-circle::after {
+      content: '';
+      position: absolute;
+      top: -2px;
+      left: -2px;
+      right: -2px;
+      bottom: -2px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #2196F3, #1976D2);
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+    .resource-circle.empty {
+      background: #f5f5f5;
+      border: 2px dashed #ccc;
+    }
+    .resource-circle:hover {
+      transform: scale(1.2);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+    .resource-circle:hover::after {
+      opacity: 0.2;
+    }
+    .legend {
+      margin-top: 15px;
+      padding: 12px;
+      background: #f8f9fa;
+      border-radius: 8px;
+      font-size: 12px;
+      border: 1px solid #e0e0e0;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 8px 0;
+      padding: 5px;
+      border-radius: 4px;
+      transition: background-color 0.3s ease;
+    }
+    .legend-item:hover {
+      background-color: #fff;
+    }
+    .resource-stats {
+      font-size: 11px;
+      color: #666;
+      margin-top: 5px;
+      padding-top: 5px;
+      border-top: 1px solid #eee;
+    }
+    .resource-count {
+      font-weight: bold;
+      color: #2196F3;
+    }
+    .node-info {
+      flex-grow: 1;
+      font-size: 12px;
+      color: #666;
+    }
+    .node-connections {
+      color: #666;
+      font-size: 11px;
+      margin-top: 3px;
+    }
+    .log-timeline {
+      margin-top: 20px;
+      padding: 15px;
+      background: #f8f9fa;
+      border-radius: 8px;
+      border: 1px solid #e0e0e0;
+      position: relative;
+    }
+    .timeline-header {
+      font-weight: bold;
+      color: #1976D2;
+      margin-bottom: 15px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 10px;
+      border-bottom: 2px solid #e0e0e0;
+    }
+    .timeline-steps {
+      position: relative;
+      padding-left: 30px;
+      max-height: 300px;
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: #2196F3 #f0f0f0;
+    }
+    .timeline-steps::-webkit-scrollbar {
+      width: 6px;
+    }
+    .timeline-steps::-webkit-scrollbar-track {
+      background: #f0f0f0;
+      border-radius: 3px;
+    }
+    .timeline-steps::-webkit-scrollbar-thumb {
+      background: #2196F3;
+      border-radius: 3px;
+    }
+    .timeline-step {
+      position: relative;
+      margin-bottom: 20px;
+      padding: 15px;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+      transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+      cursor: pointer;
+      transform-origin: left center;
+    }
+    .timeline-step:hover {
+      transform: translateX(10px) scale(1.02);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+    .timeline-step::before {
+      content: '';
+      position: absolute;
+      left: -34px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #2196F3;
+      border: 3px solid white;
+      box-shadow: 0 0 0 3px #2196F3;
+    }
+    .timeline-step.active::before {
+      background: #4CAF50;
+      box-shadow: 0 0 0 3px #4CAF50;
+    }
+    .timeline-step.failed::before {
+      background: #f44336;
+      box-shadow: 0 0 0 3px #f44336;
+    }
+    .timeline-step.completed::before {
+      background: #4CAF50;
+      box-shadow: 0 0 0 3px #4CAF50;
+    }
+    .step-content {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 15px;
+      align-items: center;
+    }
+    .step-node {
+      width: 35px;
+      height: 35px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #4CAF50, #388E3C);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-weight: bold;
+      font-size: 14px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+      transition: all 0.3s ease;
+    }
+    .step-node:hover {
+      transform: scale(1.1);
+      box-shadow: 0 3px 8px rgba(0,0,0,0.3);
+    }
+    .step-details {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    .step-message {
+      font-size: 13px;
+      color: #333;
+      font-weight: 500;
+    }
+    .step-info {
+      font-size: 11px;
+      color: #666;
+      display: flex;
+      gap: 10px;
+    }
+    .step-info-item {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .step-info-icon {
+      width: 14px;
+      height: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #2196F3;
+    }
+    .step-resources {
+      display: flex;
+      gap: 6px;
+      padding: 5px;
+      background: #f8f9fa;
+      border-radius: 6px;
+      transition: all 0.3s ease;
+    }
+    .step-resources:hover {
+      background: #e3f2fd;
+      transform: scale(1.05);
+    }
+    .step-resource {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #2196F3, #1976D2);
+      border: 2px solid #1976D2;
+      transition: all 0.3s ease;
+      position: relative;
+    }
+    .step-resource::after {
+      content: '';
+      position: absolute;
+      top: -2px;
+      left: -2px;
+      right: -2px;
+      bottom: -2px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #2196F3, #1976D2);
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+    .step-resource:hover {
+      transform: scale(1.2);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+    .step-resource:hover::after {
+      opacity: 0.2;
+    }
+    .step-time {
+      font-size: 11px;
+      color: #999;
+      margin-top: 5px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .step-time::before {
+      content: '⏱';
+      font-size: 12px;
+    }
+    @keyframes pulse {
+      0% {
+        box-shadow: 0 0 0 0 rgba(76, 175, 80, 0.4);
+      }
+      70% {
+        box-shadow: 0 0 0 10px rgba(76, 175, 80, 0);
+      }
+      100% {
+        box-shadow: 0 0 0 0 rgba(76, 175, 80, 0);
+      }
+    }
+    .timeline-controls {
+      display: flex;
+      gap: 10px;
+      margin-top: 15px;
+      padding-top: 15px;
+      border-top: 1px solid #e0e0e0;
+    }
+    .timeline-control {
+      padding: 8px 15px;
+      background: #f0f0f0;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      transition: all 0.3s ease;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .timeline-control:hover {
+      background: #e0e0e0;
+      transform: translateY(-2px);
+    }
+    .timeline-control:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+    .timeline-control::before {
+      font-size: 14px;
+    }
+    .timeline-control#prevStep::before {
+      content: '←';
+    }
+    .timeline-control#nextStep::before {
+      content: '→';
+    }
+    .timeline-control#resetTimeline::before {
+      content: '↺';
+    }
+    .resource-item.spilled {
+      background: #fff3f3;
+      border: 1px solid #ffcdd2;
+    }
+    .resource-item.spilled .node-circle {
+      background: linear-gradient(135deg, #f44336, #d32f2f);
+    }
+    .resource-status {
+      font-size: 11px;
+      color: #666;
+      margin-top: 3px;
+      font-weight: 500;
+    }
+    .resource-item.spilled .resource-status {
+      color: #d32f2f;
+    }
+    .resource-item.first-allocated {
+      background: #f1f8e9;
+      border: 1px solid #c5e1a5;
+    }
+    .resource-item.first-allocated .node-circle {
+      background: linear-gradient(135deg, #4CAF50, #388E3C);
+    }
+    .resource-circle.first-allocated {
+      background: linear-gradient(135deg, #4CAF50, #388E3C);
+    }
+    .resource-item.first-allocated .resource-status {
+      color: #388E3C;
+    }
+  </style>
+</head>
+<body>
+<div id="container">
+  <h2>Resource Allocation Graph</h2>
+  <p>Enter your graph and resource data below:</p>
+  <textarea id="inputArea" placeholder="Example:\nResources: 4\nProcess A (P: 3) --> B C\nProcess B (P: 2) --> A C\nProcess C (P: 1) --> A B"></textarea>
+  
+  <div>
+    <button onclick="processInput()">Generate Graph</button>
+    <button onclick="analyzeGraph()">Analyze Graph</button>
+    <button onclick="simulateAllocation()">Simulate Allocation</button>
+    <button onclick="showSteps()">Show Steps</button>
+    <button onclick="resetGraph()">Reset</button>
+  </div>
+
+  <div class="output" id="analysisOutput"></div>
+  <div class="output" id="stepOutput"></div>
+
+  <div id="resourcePanel">
+    <div id="resourcePanelHeader">
+      <span>Resource Allocation</span>
+      <button id="togglePanel" title="Toggle Panel">◀</button>
+    </div>
+    <div id="resourceContent"></div>
+  </div>
+
+  <svg id="graph"></svg>
+</div>
+
+<script>
+  let graph = { nodes: [], links: [] }, totalResources = 0, currentStep = 0, allocationSteps = [];
+
+  const processInput = () => {
+    const input = document.getElementById('inputArea').value.trim();
+    const lines = input.split('\n').filter(line => line.trim());
+    const nodeSet = new Set();
+    graph = { nodes: [], links: [] };
+    totalResources = 0;
+
+    lines.forEach(line => {
+      if (line.toLowerCase().startsWith('resources:')) {
+        totalResources = parseInt(line.split(':')[1].trim());
+      } else if (line.includes('-->')) {
+        const processMatch = line.match(/([A-Za-z0-9]+)\s*\(P:\s*(\d+)\)/);
+        if (!processMatch) {
+          alert('Invalid process format. Use: ProcessName (P: number) --> connections');
+          return;
+        }
+        
+        const [_, processName, priority] = processMatch;
+        const targets = line.split('-->')[1].trim().split(/\s+/);
+        
+        nodeSet.add(processName);
+        targets.forEach(target => {
+          nodeSet.add(target);
+          graph.links.push({ source: processName, target });
+        });
+
+        if (!graph.nodes.find(n => n.id === processName)) {
+          graph.nodes.push({ id: processName, priority: parseInt(priority), resources: 0 });
+        }
+      }
+    });
+
+    Array.from(nodeSet).forEach(id => {
+      if (!graph.nodes.find(n => n.id === id)) {
+        graph.nodes.push({ id, priority: 1, resources: 0 });
+      }
+    });
+
+    drawGraph(graph);
+    updateResourcePanel();
+    document.getElementById('analysisOutput').innerHTML = '';
+    document.getElementById('stepOutput').innerHTML = '';
+  };
+
+  const drawGraph = (graph) => {
+    const svg = d3.select("#graph");
+    svg.selectAll("*").remove();
+
+    const width = svg.node().clientWidth;
+    const height = svg.node().clientHeight;
+
+    const resourceNodes = Array.from({length: totalResources}, (_, i) => ({
+      id: `R${i}`,
+      type: 'resource',
+      x: width * 0.8,
+      y: height * (0.2 + (i * 0.6 / totalResources))
+    }));
+
+    const allNodes = [...graph.nodes, ...resourceNodes];
+    const processLinks = graph.links.map(link => ({...link, type: 'process'}));
+    const resourceLinks = graph.nodes.flatMap(node => {
+      const nodeAllocation = allocationSteps.find(step => step.node === node.id);
+      return nodeAllocation?.resources ? Array.from({length: nodeAllocation.resources}, (_, i) => ({
+        source: `R${i}`, target: node.id, type: 'resource', priority: node.priority,
+        isFirstAllocated: nodeAllocation.isFirstAllocated
+      })) : [];
+    });
+
+    const allLinks = [...processLinks, ...resourceLinks];
+
+    const simulation = d3.forceSimulation(allNodes)
+      .force("link", d3.forceLink(allLinks).id(d => d.id).distance(d => d.type === 'process' ? 150 : 100))
+      .force("charge", d3.forceManyBody().strength(-300))
+      .force("center", d3.forceCenter(width / 2, height / 2))
+      .force("x", d3.forceX().strength(0.1))
+      .force("y", d3.forceY().strength(0.1));
+
+    svg.append("defs").append("marker")
+      .attr("id", "arrow")
+      .attr("viewBox", "0 -5 10 10")
+      .attr("refX", 28)
+      .attr("refY", 0)
+      .attr("markerWidth", 6)
+      .attr("markerHeight", 6)
+      .attr("orient", "auto")
+      .append("path")
+      .attr("d", "M0,-5L10,0L0,5")
+      .attr("fill", "#999");
+
+    const processLink = svg.append("g")
+      .selectAll("line")
+      .data(processLinks)
+      .enter().append("line")
+      .attr("stroke", "#999")
+      .attr("stroke-width", 2)
+      .attr("marker-end", "url(#arrow)");
+
+    const resourceLink = svg.append("g")
+      .selectAll("line")
+      .data(resourceLinks)
+      .enter().append("line")
+      .attr("stroke", d => d.isFirstAllocated ? "#4CAF50" : "#9E9E9E")
+      .attr("stroke-width", 2)
+      .attr("stroke-dasharray", d => d.isFirstAllocated ? "0" : "5,5");
+
+    const processNode = svg.append("g")
+      .selectAll("g")
+      .data(graph.nodes)
+      .enter().append("g")
+      .call(d3.drag()
+        .on("start", dragstarted)
+        .on("drag", dragged)
+        .on("end", dragended));
+
+    processNode.append("circle")
+      .attr("r", 22)
+      .attr("fill", d => {
+        const nodeAllocation = allocationSteps.find(step => step.node === d.id);
+        return nodeAllocation?.isFirstAllocated ? "#4CAF50" : "#9E9E9E";
+      });
+
+    processNode.append("text")
+      .attr("text-anchor", "middle")
+      .attr("dy", 5)
+      .attr("fill", "#fff")
+      .style("font-weight", "bold")
+      .text(d => `${d.id} (P${d.priority})`);
+
+    const resourceNode = svg.append("g")
+      .selectAll("g")
+      .data(resourceNodes)
+      .enter().append("g");
+
+    resourceNode.append("rect")
+      .attr("width", 40)
+      .attr("height", 40)
+      .attr("rx", 5)
+      .attr("ry", 5)
+      .attr("fill", "#2196F3")
+      .attr("stroke", "#1976D2")
+      .attr("stroke-width", 2);
+
+    resourceNode.append("text")
+      .attr("text-anchor", "middle")
+      .attr("dy", 5)
+      .attr("fill", "#fff")
+      .style("font-weight", "bold")
+      .text(d => d.id);
+
+    simulation.on("tick", () => {
+      processLink
+        .attr("x1", d => d.source.x)
+        .attr("y1", d => d.source.y)
+        .attr("x2", d => d.target.x)
+        .attr("y2", d => d.target.y);
+
+      resourceLink
+        .attr("x1", d => d.source.x)
+        .attr("y1", d => d.source.y)
+        .attr("x2", d => d.target.x)
+        .attr("y2", d => d.target.y);
+
+      processNode.attr("transform", d => `translate(${d.x},${d.y})`);
+      resourceNode.attr("transform", d => `translate(${d.x - 20},${d.y - 20})`);
+    });
+
+    function dragstarted(event, d) {
+      if (!event.active) simulation.alphaTarget(0.3).restart();
+      d.fx = d.x;
+      d.fy = d.y;
+    }
+
+    function dragged(event, d) {
+      d.fx = event.x;
+      d.fy = event.y;
+    }
+
+    function dragended(event, d) {
+      if (!event.active) simulation.alphaTarget(0);
+      d.fx = null;
+      d.fy = null;
+    }
+  };
+
+  const analyzeGraph = () => {
+    const nodeCount = graph.nodes.length;
+    const linkCount = graph.links.length;
+    document.getElementById('analysisOutput').innerHTML = `
+      <strong>Graph Analysis:</strong><br>
+      Total Nodes: ${nodeCount}<br>
+      Total Links: ${linkCount}<br>
+      Total Resources: ${totalResources}<br>
+    `;
+  };
+
+  const calculatePriority = node => {
+    const incomingConnections = graph.links.filter(link => link.target === node.id).length;
+    const outgoingConnections = graph.links.filter(link => link.source === node.id).length;
+    return {
+      priorityScore: Math.min(3, Math.max(1, Math.ceil((incomingConnections * 2 + outgoingConnections) / 2))),
+      incomingConnections,
+      outgoingConnections,
+      totalConnections: incomingConnections + outgoingConnections
+    };
+  };
+
+  const generateAllocationSteps = () => {
+    allocationSteps = [];
+    let step = 1;
+    let remaining = totalResources;
+    let firstAllocated = true;
+
+    const priorityMap = graph.nodes
+      .map(node => {
+        const priorityInfo = calculatePriority(node);
+        return {
+          node,
+          priority: node.priority || priorityInfo.priorityScore,
+          ...priorityInfo
+        };
+      })
+      .sort((a, b) => {
+        if (b.priority !== a.priority) return b.priority - a.priority;
+        if (b.totalConnections !== a.totalConnections) return b.totalConnections - a.totalConnections;
+        return a.node.id.localeCompare(b.node.id);
+      });
+
+    for (let { node, priority, incomingConnections, outgoingConnections } of priorityMap) {
+      if (remaining < 3) {
+        allocationSteps.push({
+          step,
+          node: node.id,
+          resources: 0,
+          priority,
+          incomingConnections,
+          outgoingConnections,
+          message: `Process ${node.id} spilled - Not enough resources (requires exactly 3)`,
+          status: 'failed',
+          isFirstAllocated: false
+        });
+      } else {
+        allocationSteps.push({
+          step,
+          node: node.id,
+          resources: 3,
+          priority,
+          incomingConnections,
+          outgoingConnections,
+          message: `Allocated 3 resources to Process ${node.id} (P: ${priority})`,
+          status: 'success',
+          isFirstAllocated: firstAllocated
+        });
+        firstAllocated = false;
+        remaining -= 3;
+      }
+      step++;
+    }
+  };
+
+  const updateTimeline = () => {
+    const timelineSteps = document.getElementById('timelineSteps');
+    timelineSteps.innerHTML = '';
+
+    allocationSteps.forEach((step, index) => {
+      const stepDiv = document.createElement('div');
+      stepDiv.className = `timeline-step ${index === currentStep ? 'active' : ''} ${index < currentStep ? 'completed' : ''} ${step.status}`;
+      
+      const resources = Array(step.resources).fill(0).map((_, i) => 
+        `<div class="step-resource" title="Resource ${i + 1}"></div>`
+      ).join('');
+
+      stepDiv.innerHTML = `
+        <div class="step-content">
+          <div class="step-node" title="Process ${step.node}">${step.node}</div>
+          <div class="step-details">
+            <div class="step-message">${step.message}</div>
+            <div class="step-info">
+              <div class="step-info-item">
+                <span class="step-info-icon"></span>
+                <span>Priority: ${step.priority}</span>
+              </div>
+            </div>
+          </div>
+          <div class="step-resources" title="${step.resources} resource${step.resources !== 1 ? 's' : ''} allocated">
+            ${resources}
+          </div>
+        </div>
+        <div class="step-time">Step ${step.step}</div>
+      `;
+      
+      stepDiv.addEventListener('click', () => {
+        if (index !== currentStep) {
+          currentStep = index;
+          updateTimeline();
+          updateResourceAllocation();
+        }
+      });
+      
+      timelineSteps.appendChild(stepDiv);
+    });
+
+    document.getElementById('prevStep').disabled = currentStep === 0;
+    document.getElementById('nextStep').disabled = currentStep === allocationSteps.length - 1;
+  };
+
+  const updateResourceAllocation = () => {
+    graph.nodes.forEach(node => node.resources = 0);
+    for (let i = 0; i <= currentStep; i++) {
+      const step = allocationSteps[i];
+      const node = graph.nodes.find(n => n.id === step.node);
+      if (node) node.resources = step.resources;
+    }
+    drawGraph(graph);
+    updateResourcePanel();
+  };
+
+  const makeDraggable = element => {
+    if (!element) return;
+    
+    let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
+    const header = element.querySelector('#resourcePanelHeader');
+    const toggleButton = element.querySelector('#togglePanel');
+    
+    if (!header) return;
+
+    toggleButton.addEventListener('click', e => {
+      e.stopPropagation();
+      element.classList.toggle('collapsed');
+    });
+
+    header.onmousedown = e => {
+      if (e.target === toggleButton) return;
+      e.preventDefault();
+      pos3 = e.clientX;
+      pos4 = e.clientY;
+      document.onmouseup = closeDragElement;
+      document.onmousemove = elementDrag;
+      element.classList.add('dragging');
+    };
+
+    const elementDrag = e => {
+      e.preventDefault();
+      pos1 = pos3 - e.clientX;
+      pos2 = pos4 - e.clientY;
+      pos3 = e.clientX;
+      pos4 = e.clientY;
+
+      const newTop = Math.min(Math.max(0, element.offsetTop - pos2), window.innerHeight - element.offsetHeight);
+      const newLeft = Math.min(Math.max(0, element.offsetLeft - pos1), window.innerWidth - element.offsetWidth);
+
+      element.style.top = newTop + "px";
+      element.style.left = newLeft + "px";
+    };
+
+    const closeDragElement = () => {
+      document.onmouseup = null;
+      document.onmousemove = null;
+      element.classList.remove('dragging');
+    };
+
+    header.addEventListener('touchstart', e => {
+      const touch = e.touches[0];
+      pos3 = touch.clientX;
+      pos4 = touch.clientY;
+      document.ontouchend = closeDragElement;
+      document.ontouchmove = e => {
+        const touch = e.touches[0];
+        pos1 = pos3 - touch.clientX;
+        pos2 = pos4 - touch.clientY;
+        pos3 = touch.clientX;
+        pos4 = touch.clientY;
+        element.style.top = (element.offsetTop - pos2) + "px";
+        element.style.left = (element.offsetLeft - pos1) + "px";
+      };
+    });
+  };
+
+  const updateResourcePanel = () => {
+    const panel = document.getElementById('resourceContent');
+    panel.innerHTML = `
+      <div class="legend">
+        <div class="legend-item">
+          <div class="resource-circle first-allocated"></div>
+          <span>First Allocated Process</span>
+        </div>
+        <div class="legend-item">
+          <div class="resource-circle"></div>
+          <span>Subsequent Processes</span>
+        </div>
+        <div class="legend-item">
+          <div class="resource-circle empty"></div>
+          <span>Available Resource</span>
+        </div>
+        <div class="resource-stats">
+          Total Resources: <span class="resource-count">${totalResources}</span>
+          <br>
+          Required per Process: <span class="resource-count">3</span>
+        </div>
+      </div>
+      ${[...graph.nodes].sort((a, b) => a.id.localeCompare(b.id)).map(node => {
+        const connections = graph.links.filter(link => link.source === node.id || link.target === node.id).length;
+        const nodeAllocation = allocationSteps.find(step => step.node === node.id);
+        const isFirstAllocated = nodeAllocation?.isFirstAllocated || false;
+        const resources = Array(node.resources).fill(0).map(() => '<div class="resource-circle"></div>').join('');
+        const emptySlots = Array(Math.max(0, 3 - node.resources)).fill(0)
+          .map(() => '<div class="resource-circle empty"></div>').join('');
+        
+        return `
+          <div class="resource-item ${isFirstAllocated ? 'first-allocated' : ''}">
+            <div class="node-circle">${node.id}</div>
+            <div class="node-info">
+              <div>Node ${node.id}</div>
+              <div class="node-connections">${connections} connection${connections !== 1 ? 's' : ''}</div>
+              <div class="resource-status">${isFirstAllocated ? 'First Allocated' : 'Resources Allocated'}</div>
+            </div>
+            <div class="resources-container">
+              ${resources}${emptySlots}
+            </div>
+          </div>
+        `;
+      }).join('')}
+      <div class="log-timeline">
+        <div class="timeline-header">
+          <span>Allocation Timeline</span>
+          <div class="timeline-controls">
+            <button class="timeline-control" onclick="prevStep()" id="prevStep">Previous</button>
+            <button class="timeline-control" onclick="nextStep()" id="nextStep">Next</button>
+            <button class="timeline-control" onclick="resetTimeline()" id="resetTimeline">Reset</button>
+          </div>
+        </div>
+        <div class="timeline-steps" id="timelineSteps"></div>
+      </div>
+    `;
+
+    generateAllocationSteps();
+    updateTimeline();
+  };
+
+  const simulateAllocation = () => {
+    currentStep = 0;
+    generateAllocationSteps();
+    updateTimeline();
+    updateResourceAllocation();
+  };
+
+  const showSteps = simulateAllocation;
+
+  const resetGraph = () => {
+    currentStep = 0;
+    allocationSteps = [];
+    document.getElementById('inputArea').value = '';
+    document.getElementById('analysisOutput').innerHTML = '';
+    document.getElementById('stepOutput').innerHTML = '';
+    d3.select("#graph").selectAll("*").remove();
+    graph = { nodes: [], links: [] };
+    totalResources = 0;
+    updateResourcePanel();
+  };
+
+  const nextStep = () => {
+    if (currentStep < allocationSteps.length - 1) {
+      currentStep++;
+      updateTimeline();
+      updateResourceAllocation();
+    }
+  };
+
+  const prevStep = () => {
+    if (currentStep > 0) {
+      currentStep--;
+      updateTimeline();
+      updateResourceAllocation();
+    }
+  };
+
+  const resetTimeline = () => {
+    currentStep = 0;
+    updateTimeline();
+    updateResourceAllocation();
+  };
+
+  document.addEventListener('DOMContentLoaded', () => {
+    makeDraggable(document.getElementById('resourcePanel'));
+    
+    window.addEventListener('beforeunload', () => {
+      if (window.messagePorts) {
+        window.messagePorts.forEach(port => {
+          try { port.close(); } catch (e) { console.warn('Error closing message port:', e); }
+        });
+      }
+    });
+
+    window.addEventListener('error', event => {
+      if (event.message?.includes('message port closed')) {
+        console.warn('Message port closed unexpectedly, attempting recovery...');
+        updateResourcePanel();
+        updateTimeline();
+      }
+    });
+  });
+</script>
+</body>
+</html>
